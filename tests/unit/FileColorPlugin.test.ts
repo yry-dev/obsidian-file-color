@@ -100,6 +100,34 @@ describe('FileColorPlugin', () => {
     expect(plugin.saveData).toHaveBeenCalledWith(plugin.settings)
   })
 
+  it('reloads settings and reapplies styles when data.json changes externally', async () => {
+    const { app, plugin } = createPluginHarness(
+      {
+        palette: [{ id: 'red', name: 'Red', value: '#ff0000' }],
+        fileColors: [{ path: 'Folder', color: 'red' }],
+      },
+      {
+        palette: [{ id: 'blue', name: 'Blue', value: '#0000ff' }],
+        fileColors: [{ path: 'Folder', color: 'blue' }],
+      }
+    )
+    const fileExplorer = createMockFileExplorer(['Folder'])
+    app.workspace.fileExplorers.push(fileExplorer)
+    plugin.generateColorStyles()
+    plugin.applyColorStyles()
+
+    await plugin.onExternalSettingsChange()
+
+    const styleEl = document.getElementById('fileColorPluginStyles')
+    expect(plugin.settings.palette).toEqual([{ id: 'blue', name: 'Blue', value: '#0000ff' }])
+    expect(plugin.settings.fileColors).toEqual([{ path: 'Folder', color: 'blue' }])
+    expect(styleEl).toHaveTextContent('.file-color-color-blue { --file-color-color: #0000ff; }')
+    expect(styleEl).not.toHaveTextContent('red')
+    expect(fileExplorer.view.fileItems.Folder.el).toHaveClass('file-color-color-blue')
+    expect(fileExplorer.view.fileItems.Folder.el).not.toHaveClass('file-color-color-red')
+    expect(plugin.saveData).not.toHaveBeenCalled()
+  })
+
   it('removes deleted files and descendants from settings', async () => {
     const settings = {
       fileColors: [

@@ -68,6 +68,16 @@ export class FileColorPlugin extends Plugin {
     this.settings = Object.assign({}, defaultSettings, await this.loadData())
   }
 
+  // Obsidian calls this when data.json changes on disk outside the app,
+  // for example when Obsidian Sync delivers settings from another device.
+  // Without it the plugin keeps its stale in-memory settings and writes
+  // them back over the synced file on the next save.
+  async onExternalSettingsChange() {
+    await this.loadSettings()
+    this.generateColorStyles()
+    this.applyColorStyles()
+  }
+
   async saveSettings(immediate?: boolean) {
     if (immediate) {
       return this.saveSettingsInternal();
