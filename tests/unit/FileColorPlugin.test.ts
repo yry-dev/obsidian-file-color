@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPluginHarness } from './fixtures/plugin'
 import { createMockFileExplorer } from './mocks/obsidian'
 
@@ -126,6 +126,57 @@ describe('FileColorPlugin', () => {
     expect(fileExplorer.view.fileItems.Folder.el).toHaveClass('file-color-color-blue')
     expect(fileExplorer.view.fileItems.Folder.el).not.toHaveClass('file-color-color-red')
     expect(plugin.saveData).not.toHaveBeenCalled()
+  })
+
+  it('does not save when a file without a color is renamed', async () => {
+    const settings = { fileColors: [{ path: 'Other.md', color: 'blue' }] }
+    const { app, plugin } = createPluginHarness(settings, settings)
+
+    await plugin.onload()
+    await app.vault.emit('rename', { path: 'New.md' }, 'Old.md')
+
+    expect(plugin.settings.fileColors).toEqual([{ path: 'Other.md', color: 'blue' }])
+    expect(plugin.saveData).not.toHaveBeenCalled()
+  })
+
+  it('does not save when a file without a color is deleted', async () => {
+    const settings = { fileColors: [{ path: 'Other.md', color: 'blue' }] }
+    const { app, plugin } = createPluginHarness(settings, settings)
+
+    await plugin.onload()
+    await app.vault.emit('delete', { path: 'Gone.md' })
+
+    expect(plugin.settings.fileColors).toEqual([{ path: 'Other.md', color: 'blue' }])
+    expect(plugin.saveData).not.toHaveBeenCalled()
+  })
+
+  it('saves when data.json is unchanged since it was last read', async () => {
+    const { app, plugin } = createPluginHarness({}, { cascadeColors: true })
+    app.vault.adapter.stat.mockResolvedValue({ mtime: 100 })
+
+    await plugin.loadSettings()
+    plugin.settings.colorBackground = true
+    await plugin.saveSettings(true)
+
+    expect(plugin.saveData).toHaveBeenCalledWith(plugin.settings)
+    expect(plugin.settings.colorBackground).toBe(true)
+  })
+
+  it('reloads instead of saving when data.json changed on disk since it was last read', async () => {
+    const { app, plugin } = createPluginHarness({}, { cascadeColors: true })
+    app.vault.adapter.stat.mockResolvedValueOnce({ mtime: 100 })
+    await plugin.loadSettings()
+    plugin.loadData = vi.fn(async () => ({
+      palette: [{ id: 'blue', name: 'Blue', value: '#0000ff' }],
+    }))
+    app.vault.adapter.stat.mockResolvedValue({ mtime: 200 })
+
+    plugin.settings.colorBackground = true
+    await plugin.saveSettings(true)
+
+    expect(plugin.saveData).not.toHaveBeenCalled()
+    expect(plugin.settings.colorBackground).toBe(false)
+    expect(plugin.settings.palette).toEqual([{ id: 'blue', name: 'Blue', value: '#0000ff' }])
   })
 
   it('removes deleted files and descendants from settings', async () => {
